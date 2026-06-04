@@ -3,18 +3,28 @@ package energy
 import (
 	"math"
 	"sync"
+
+	container "github.com/GoGamesLab/Inventory/pkg"
+	materials "github.com/GoGamesLab/Materials/pkg"
 )
+
+type Supply struct {
+	Fuel container.Storage
+}
 
 // Reactor químico/nuclear: consome combustível continuamente para gerar energia,
 // armazenando-a em uma bateria interna até a capacidade máxima.
 type Reactor struct {
-	mu          sync.Mutex
-	efficiency  float64  // converte combustível para energia base
-	fuel        float64  // combustível bruto armazenado (material)
+	mu         sync.Mutex
+	efficiency float64 // converte combustível para energia base
+	fuel       *Supply // combustível bruto armazenado (material)
+	//fuel        float64
 	battery     *Battery // buffer interno que representa a energia armazenada
 	burnRate    float64  // quantidade máxima de combustível que queima por tick
 	lossPerTick EnergyUnit
 }
+
+const ReactorFuelID = container.ItemID(materials.UraniumID)
 
 func NewReactor(eff float64, internalCapacity EnergyUnit, burnRate float64) *Reactor {
 	if eff <= 0 {
@@ -23,10 +33,22 @@ func NewReactor(eff float64, internalCapacity EnergyUnit, burnRate float64) *Rea
 	if burnRate <= 0 {
 		burnRate = 10.0
 	}
+
+	fuel := &Supply{
+		Fuel: *container.NewStorage(),
+	}
+	fuel.Fuel.AddItem(ReactorFuelID, 0)
 	return &Reactor{
 		efficiency: eff,
+		fuel:       fuel,
 		burnRate:   burnRate,
 		battery:    NewBattery(internalCapacity),
+	}
+}
+
+func (r *Reactor) GetFuel() Supply {
+	return Supply{
+		Fuel: r.fuel.Fuel,
 	}
 }
 
@@ -37,14 +59,14 @@ func (r *Reactor) AddFuel(amount float64) {
 	if amount <= 0 {
 		return
 	}
-	r.fuel += amount
+	r.fuel.Fuel.AddItem(ReactorFuelID, float32(amount))
 }
 
 // Fuel retorna a quantidade atual de combustível bruto dentro do reator
 func (r *Reactor) Fuel() float64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.fuel
+	return float64(r.fuel.Fuel.Items[ReactorFuelID])
 }
 
 // Update simula a passagem de tempo (tick). Transforma combustível em energia interna.
@@ -55,7 +77,7 @@ func (r *Reactor) Update() []EnergyByproduct {
 
 	var byproducts []EnergyByproduct
 
-	if r.fuel <= 0 {
+	if r.fuel.Fuel.Items[ReactorFuelID] <= 0 {
 		return nil
 	}
 
@@ -75,13 +97,14 @@ func (r *Reactor) Update() []EnergyByproduct {
 	fuelToBurn := energyToProduce / r.efficiency
 
 	// Limitar o consumo à quantidade real de combustível em estoque
-	if fuelToBurn > r.fuel {
-		fuelToBurn = r.fuel
+	estoque := float64(r.fuel.Fuel.Items[ReactorFuelID])
+	if fuelToBurn > estoque {
+		fuelToBurn = estoque
 		energyToProduce = fuelToBurn * r.efficiency
 	}
 
 	// Consumir o combustível e injetar a energia na bateria interna
-	r.fuel -= fuelToBurn
+	r.fuel.Fuel.RemoveItem(ReactorFuelID, float32(fuelToBurn))
 	_, _ = r.battery.Produce(energyToProduce)
 
 	// O calor gerado como subproduto é proporcional à ineficiência do combustível consumido

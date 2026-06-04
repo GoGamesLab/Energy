@@ -37,7 +37,7 @@ func main() {
 	energyManager.RegisterNode("reactor-1", reactorA)
 
 	// processo contínuo
-	reactorA.AddFuel(1000)
+	reactorA.AddFuel(2)
 	for reactorA.Fuel() > 0 {
 		updateByProducts := reactorA.Update()
 		Logger.Info(fmt.Sprintf("Combustivel %f, Energia %f", reactorA.Fuel(), reactorA.Stored()))
@@ -71,7 +71,8 @@ func main() {
 	}
 
 	// 2. Abastece o reator com combustível bruto e processa um tick de queima
-	reactorB.AddFuel(100.0)
+	reactorB.AddFuel(30.0)
+	fmt.Printf("Novo reator B com %f elementos de combustível\n", reactorB.Fuel())
 	reactorByproducts := reactorB.Update()
 
 	fmt.Println("--- TICK 1: Geração no Reator ---")
