@@ -6,10 +6,17 @@ import (
 	"log"
 	"math"
 	"sync"
+
+	container "github.com/GoGamesLab/Inventory/pkg"
 )
 
 // Unidade de energia base (joules-equivalente)
 type EnergyUnit = float64
+
+// Fonte de combustível para fontes que consomem materiais ou substâncias
+type Supply struct {
+	Fuel container.Storage
+}
 
 // Fonte/sumidouro genérico de energia
 type EnergySource interface {

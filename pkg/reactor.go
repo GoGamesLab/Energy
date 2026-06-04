@@ -8,25 +8,21 @@ import (
 	materials "github.com/GoGamesLab/Materials/pkg"
 )
 
-type Supply struct {
-	Fuel container.Storage
-}
-
-// Reactor químico/nuclear: consome combustível continuamente para gerar energia,
+// UraniumReactor químico/nuclear: consome combustível continuamente para gerar energia,
 // armazenando-a em uma bateria interna até a capacidade máxima.
-type Reactor struct {
-	mu         sync.Mutex
-	efficiency float64 // converte combustível para energia base
-	fuel       *Supply // combustível bruto armazenado (material)
-	//fuel        float64
+type UraniumReactor struct {
+	mu          sync.Mutex
+	efficiency  float64  // converte combustível para energia base
+	fuel        *Supply  // combustível bruto armazenado (material)
 	battery     *Battery // buffer interno que representa a energia armazenada
 	burnRate    float64  // quantidade máxima de combustível que queima por tick
 	lossPerTick EnergyUnit
 }
 
+// Combustível exclusivo do reator
 const ReactorFuelID = container.ItemID(materials.UraniumID)
 
-func NewReactor(eff float64, internalCapacity EnergyUnit, burnRate float64) *Reactor {
+func NewReactor(eff float64, internalCapacity EnergyUnit, burnRate float64) *UraniumReactor {
 	if eff <= 0 {
 		eff = 0.5
 	}
@@ -38,7 +34,7 @@ func NewReactor(eff float64, internalCapacity EnergyUnit, burnRate float64) *Rea
 		Fuel: *container.NewStorage(),
 	}
 	fuel.Fuel.AddItem(ReactorFuelID, 0)
-	return &Reactor{
+	return &UraniumReactor{
 		efficiency: eff,
 		fuel:       fuel,
 		burnRate:   burnRate,
@@ -46,14 +42,14 @@ func NewReactor(eff float64, internalCapacity EnergyUnit, burnRate float64) *Rea
 	}
 }
 
-func (r *Reactor) GetFuel() Supply {
+func (r *UraniumReactor) GetFuel() Supply {
 	return Supply{
 		Fuel: r.fuel.Fuel,
 	}
 }
 
 // AddFuel adiciona combustível bruto (material) ao reator
-func (r *Reactor) AddFuel(amount float64) {
+func (r *UraniumReactor) AddFuel(amount float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if amount <= 0 {
@@ -63,7 +59,7 @@ func (r *Reactor) AddFuel(amount float64) {
 }
 
 // Fuel retorna a quantidade atual de combustível bruto dentro do reator
-func (r *Reactor) Fuel() float64 {
+func (r *UraniumReactor) Fuel() float64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return float64(r.fuel.Fuel.Items[ReactorFuelID])
@@ -71,7 +67,7 @@ func (r *Reactor) Fuel() float64 {
 
 // Update simula a passagem de tempo (tick). Transforma combustível em energia interna.
 // Deve ser chamado em cada iteração do loop principal do jogo para que o reator funcione de forma passiva.
-func (r *Reactor) Update() []EnergyByproduct {
+func (r *UraniumReactor) Update() []EnergyByproduct {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -118,29 +114,29 @@ func (r *Reactor) Update() []EnergyByproduct {
 
 // --- Implementação da Interface EnergyNode (Delegações para a Bateria Interna) ---
 
-func (r *Reactor) Peek() EnergyUnit {
+func (r *UraniumReactor) Peek() EnergyUnit {
 	return r.battery.Peek()
 }
 
-func (r *Reactor) Consume(amount EnergyUnit) (EnergyUnit, error) {
+func (r *UraniumReactor) Consume(amount EnergyUnit) (EnergyUnit, error) {
 	return r.battery.Consume(amount)
 }
 
-func (r *Reactor) Produce(amount EnergyUnit) (EnergyUnit, error) {
+func (r *UraniumReactor) Produce(amount EnergyUnit) (EnergyUnit, error) {
 	// Permite que sistemas externos injetem energia de volta no reator, caso necessário
 	return r.battery.Produce(amount)
 }
 
-func (r *Reactor) Capacity() EnergyUnit {
+func (r *UraniumReactor) Capacity() EnergyUnit {
 	return r.battery.Capacity()
 }
 
-func (r *Reactor) Stored() EnergyUnit {
+func (r *UraniumReactor) Stored() EnergyUnit {
 	return r.battery.Stored()
 }
 
-func (r *Reactor) Demand() EnergyUnit { return r.lossPerTick }
+func (r *UraniumReactor) Demand() EnergyUnit { return r.lossPerTick }
 
-func (r *Reactor) ApplyTickLoss() {
+func (r *UraniumReactor) ApplyTickLoss() {
 	r.battery.ApplyTickLoss()
 }
