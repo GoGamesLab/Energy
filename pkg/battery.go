@@ -2,12 +2,10 @@ package energy
 
 import (
 	"math"
-	"sync"
 )
 
 // Bateria simples / reservatório
 type Battery struct {
-	mu          sync.Mutex
 	capacity    EnergyUnit
 	stored      EnergyUnit
 	lossPerTick EnergyUnit
@@ -24,8 +22,6 @@ func NewBattery(cap EnergyUnit) *Battery {
 }
 
 func (b *Battery) Produce(amount EnergyUnit) (EnergyUnit, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	if amount <= 0 {
 		return 0, nil
 	}
@@ -39,8 +35,6 @@ func (b *Battery) Produce(amount EnergyUnit) (EnergyUnit, error) {
 }
 
 func (b *Battery) Consume(amount EnergyUnit) (EnergyUnit, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	if amount <= 0 {
 		return 0, nil
 	}
@@ -55,26 +49,14 @@ func (b *Battery) Consume(amount EnergyUnit) (EnergyUnit, error) {
 
 func (b *Battery) Demand() EnergyUnit { return b.lossPerTick }
 
-func (b *Battery) Peek() EnergyUnit {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.stored
-}
+func (b *Battery) Peek() EnergyUnit { return b.stored }
 
-func (b *Battery) Capacity() EnergyUnit {
-	return b.capacity
-}
+func (b *Battery) Capacity() EnergyUnit { return b.capacity }
 
-func (b *Battery) Stored() EnergyUnit {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.stored
-}
+func (b *Battery) Stored() EnergyUnit { return b.stored }
 
 // ApplyTickLoss aplica perda por tick; chamada externamente pelo simulador/tick loop.
 func (b *Battery) ApplyTickLoss() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	if b.lossPerTick <= 0 || b.stored <= 0 {
 		return
 	}

@@ -10,19 +10,13 @@ import (
 
 var Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-func main() {
-	Logger.Info("🧳 Energy control start")
-
-	energyManager := energy.NewEnergyManager()
-
-	energyManager.RegisterConverter(energy.NewHeatConverter(0.9))
-
+func runReactorA(em *energy.EnergyManager) {
 	battery := energy.NewBattery(10000) // capacity
-	energyManager.RegisterNode("battery-1", battery)
+	em.RegisterNode("battery-1", battery)
 
 	// processo requer 500 "heat" units
 	battery.Produce(1000)
-	batteryHeatProvided, battteryByProducts, _ := energyManager.SatisfyRequirement(
+	batteryHeatProvided, battteryByProducts, _ := em.SatisfyRequirement(
 		energy.EnergyRequirement{Amount: 500, TypeHint: "heat"},
 		[]string{"reactor-1"})
 
@@ -31,12 +25,9 @@ func main() {
 		Logger.Info(fmt.Sprintf("- byproduct %s = %f", b.Type, b.Value))
 	}
 
-	reactorA := energy.NewReactor(0.75, 1000000, 0.9)
+	reactorA := energy.NewUraniumReactor(0.75, 1000, 0.9)
+	em.RegisterNode("reactor-1", reactorA)
 
-	energyManager.RegisterConverter(energy.NewElectricConverter(0.85))
-	energyManager.RegisterNode("reactor-1", reactorA)
-
-	// processo contínuo
 	reactorA.AddFuel(2)
 	for reactorA.Fuel() > 0 {
 		updateByProducts := reactorA.Update()
@@ -44,7 +35,7 @@ func main() {
 		for _, b := range updateByProducts {
 			Logger.Info(fmt.Sprintf("- passive byproduct %s = %f", b.Type, b.Value))
 		}
-		reactorElectricityProvided, reactorByProducts, _ := energyManager.SatisfyRequirement(
+		reactorElectricityProvided, reactorByProducts, _ := em.SatisfyRequirement(
 			energy.EnergyRequirement{Amount: 1000, TypeHint: "electric"},
 			[]string{"reactor-1"})
 		Logger.Info(fmt.Sprintf("Reactor provided: %f electricity", reactorElectricityProvided))
@@ -55,10 +46,12 @@ func main() {
 			break
 		}
 	}
+}
 
+func runReactorB() {
 	// 1. Configura o cenário
-	// Reator: 75% eficiência, cabe 100k de energia interna, queima 10 combustíveis por tick
-	reactorB := energy.NewReactor(0.75, 100000, 10.0)
+	// Reator: 75% eficiência, cabe 100k de energia interna, queima 1 combustíveis por tick
+	reactorB := energy.NewUraniumReactor(0.75, 1000, 1.0)
 
 	// Destino: Uma subestação de baterias na sua fábrica para acumular o que vem do reator
 	factoryBattery := energy.NewBattery(50000)
@@ -101,5 +94,19 @@ func main() {
 		// Esse é o calor que vai dissipar nos contêineres dos cabos/fiação!
 		fmt.Printf("  [Subproduto Cabo] %s dissipado na linha: %.2f\n", bp.Type, bp.Value)
 	}
+}
 
+func main() {
+	Logger.Info("🧳 Energy control start")
+
+	energyManager := energy.NewEnergyManager()
+
+	energyManager.RegisterConverter(energy.NewHeatConverter(0.9))
+	energyManager.RegisterConverter(energy.NewElectricConverter(0.85))
+
+	// processo contínuo
+	runReactorA(energyManager)
+
+	// processo discreto
+	runReactorB()
 }

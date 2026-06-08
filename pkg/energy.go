@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"sync"
 
 	container "github.com/GoGamesLab/Inventory/pkg"
 )
@@ -54,7 +53,6 @@ type EnergyByproduct struct {
 
 // Converters registry and nodes
 type EnergyManager struct {
-	mu         sync.Mutex
 	converters map[string]EnergyConverter
 	nodes      map[string]EnergyNode
 }
@@ -66,24 +64,14 @@ func NewEnergyManager() *EnergyManager {
 	}
 }
 
-func (m *EnergyManager) RegisterConverter(c EnergyConverter) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.converters[c.TypeName()] = c
-}
+func (m *EnergyManager) RegisterConverter(c EnergyConverter) { m.converters[c.TypeName()] = c }
 
-func (m *EnergyManager) RegisterNode(id string, n EnergyNode) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.nodes[id] = n
-}
+func (m *EnergyManager) RegisterNode(id string, n EnergyNode) { m.nodes[id] = n }
 
 // Satisfaz um requisito: tenta prover Amount do TypeHint
 // Retorna quantidade efetivamente fornecida (base units) e byproducts gerados
 func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs []string) (provided EnergyUnit, byproducts []EnergyByproduct, err error) {
-	m.mu.Lock()
 	conv, ok := m.converters[req.TypeHint]
-	m.mu.Unlock()
 	if !ok {
 		return 0, nil, fmt.Errorf("no converter for type %q", req.TypeHint)
 	}
@@ -104,9 +92,7 @@ func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs 
 	// strategy: iterate preferred nodes first, try to consume stored base units
 	var totalProvided EnergyUnit
 	for _, id := range preferNodeIDs {
-		m.mu.Lock()
 		node, exists := m.nodes[id]
-		m.mu.Unlock()
 		if !exists {
 			continue
 		}
@@ -137,7 +123,6 @@ func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs 
 	// If still lacking, attempt to produce from nodes that can Produce (reactors),
 	// skipping the preferred nodes already tried.
 	if totalProvided < need {
-		m.mu.Lock()
 		for id, node := range m.nodes {
 			if _, isPref := preferred[id]; isPref {
 				continue
@@ -158,7 +143,6 @@ func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs 
 				break
 			}
 		}
-		m.mu.Unlock()
 	}
 
 	if totalProvided == 0 {
