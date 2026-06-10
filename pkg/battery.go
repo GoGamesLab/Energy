@@ -6,9 +6,9 @@ import (
 
 // Bateria simples / reservatório
 type Battery struct {
-	capacity    EnergyUnit
-	stored      EnergyUnit
-	lossPerTick EnergyUnit
+	capacity EnergyUnit
+	stored   EnergyUnit
+	loss     EnergyUnit
 }
 
 func NewBattery(cap EnergyUnit) *Battery {
@@ -53,7 +53,7 @@ func (b *Battery) Consume(amount EnergyUnit) (EnergyUnit, error) {
 	return use, nil
 }
 
-func (b *Battery) Demand() EnergyUnit { return b.lossPerTick }
+func (b *Battery) Demand() EnergyUnit { return b.loss }
 
 func (b *Battery) Peek() EnergyUnit { return b.stored }
 
@@ -63,10 +63,10 @@ func (b *Battery) Stored() EnergyUnit { return b.stored }
 
 // Apply tick loss aplica perda por tick; chamada externamente pelo simulador/tick loop.
 func (b *Battery) Update() {
-	if b.lossPerTick <= 0 || b.stored <= 0 {
+	if b.loss <= 0 || b.stored <= 0 {
 		return
 	}
 
-	l := math.Min(b.lossPerTick, b.stored)
+	l := math.Min(b.loss, b.stored)
 	b.stored -= l
 }

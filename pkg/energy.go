@@ -41,14 +41,12 @@ type EnergyNode interface {
 type EnergyRequirement struct {
 	Amount   EnergyUnit // em unidades base
 	TypeHint string     // "heat", "electric", "kinetic", "nuclear" -- usado para escolher conversor
-	MinTemp  float64    // opcional (para heat)
-	MaxTemp  float64
 }
 
-// Byproduct (p.ex. calor gerado ao gerar elétrico)
+// Byproduct (p.ex. calor gerado ao gerar elétricidade)
 type EnergyByproduct struct {
-	Type  string  // "heat", "radiation", ...
-	Value float64 // em representação semântica (não em EnergyUnit)
+	Type  string // "heat", "radiation", ...
+	Value EnergyUnit
 }
 
 // Converters registry and nodes
