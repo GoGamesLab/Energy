@@ -77,6 +77,7 @@ func (m *EnergyManager) RegisterNode(id string, n EnergyNode) { m.nodes[id] = n 
 
 // Satisfaz um requisito: tenta prover Amount do TypeHint
 // Retorna quantidade efetivamente fornecida (base units) e byproducts gerados
+// TODO: considerar a conversão From/To para encontrar o conversor disponível
 func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs []string) (provided EnergyUnit, byproducts []EnergyByproduct, err error) {
 	conv, ok := m.converters[req.TypeHint]
 	if !ok {
