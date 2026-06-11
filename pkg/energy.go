@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sync"
 
 	container "github.com/GoGamesLab/Inventory/pkg"
 )
@@ -55,14 +56,22 @@ type EnergyManager struct {
 	nodes      map[string]EnergyNode
 }
 
-func NewEnergyManager() *EnergyManager {
-	return &EnergyManager{
-		converters: make(map[string]EnergyConverter),
-		nodes:      make(map[string]EnergyNode),
-	}
+var (
+	em   *EnergyManager
+	once sync.Once
+)
+
+func EnergyManagerInstance() *EnergyManager {
+	once.Do(func() {
+		em = &EnergyManager{
+			converters: make(map[string]EnergyConverter),
+			nodes:      make(map[string]EnergyNode),
+		}
+	})
+	return em
 }
 
-func (m *EnergyManager) RegisterConverter(c EnergyConverter) { m.converters[c.TypeName()] = c }
+func (m *EnergyManager) RegisterConverter(c EnergyConverter) { m.converters[c.ToType()] = c }
 
 func (m *EnergyManager) RegisterNode(id string, n EnergyNode) { m.nodes[id] = n }
 
@@ -74,7 +83,7 @@ func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs 
 		return 0, nil, fmt.Errorf("no converter for type %q", req.TypeHint)
 	}
 
-	log.Printf("Using converter %s (eff=%.3f)", conv.TypeName(), conv.Efficiency())
+	log.Printf("Using converter %s (eff=%.3f)", conv.ToType(), conv.Efficiency())
 
 	need := req.Amount // in base units
 	if need <= 0 {
@@ -108,7 +117,7 @@ func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs 
 		totalProvided += consumed
 
 		// Byproduct example: conversion loss becomes heat
-		loss := (1.0 - conv.Efficiency()) * float64(consumed)
+		loss := float64(1.0-conv.Efficiency()) * float64(consumed)
 		if loss > 0 {
 			byproducts = append(byproducts, EnergyByproduct{Type: "heat", Value: loss})
 		}
@@ -133,7 +142,7 @@ func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs 
 				continue
 			}
 			totalProvided += prod
-			loss := (1.0 - conv.Efficiency()) * float64(prod)
+			loss := float64(1.0-conv.Efficiency()) * float64(prod)
 			if loss > 0 {
 				byproducts = append(byproducts, EnergyByproduct{Type: "heat", Value: loss})
 			}

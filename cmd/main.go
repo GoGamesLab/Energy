@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -12,8 +13,7 @@ var Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level:
 func main() {
 	Logger.Info("🧳 Energy control start")
 
-	energyManager := energy.NewEnergyManager()
+	energyManager := energy.EnergyManagerInstance()
 
-	energyManager.RegisterConverter(energy.NewHeatConverter(0.9))
-	energyManager.RegisterConverter(energy.NewElectricConverter(0.85))
+	Logger.Info(fmt.Sprintf("Energy manager %s created", energyManager))
 }

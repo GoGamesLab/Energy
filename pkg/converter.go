@@ -2,60 +2,52 @@ package energy
 
 import "errors"
 
-// Converter entre EnergyUnit (base) e representações semânticas
 type EnergyConverter interface {
-	TypeName() string
-	FromBase(e EnergyUnit) float64
-	ToBase(value float64) (EnergyUnit, error)
-	Efficiency() float64
+	FromType() string
+	FromBase(e EnergyUnit) EnergyUnit
+	ToType() string
+	ToBase(value EnergyUnit) (EnergyUnit, error)
+	Efficiency() float32
 }
 
-// HeatConverter: converte J <-> degrees-equivalent (design simplificado)
-type HeatConverter struct {
-	efficiency float64
-}
+type baseConverter struct{ efficiency float32 }
 
-func NewHeatConverter(efficiency float64) *HeatConverter {
-	if efficiency <= 0 {
-		efficiency = 0.9
-	}
-	return &HeatConverter{efficiency: efficiency}
-}
-
-func (c *HeatConverter) TypeName() string { return "heat" }
-
-func (c *HeatConverter) FromBase(e EnergyUnit) float64 { return float64(e) * c.efficiency }
-
-func (c *HeatConverter) ToBase(value float64) (EnergyUnit, error) {
-	if c.efficiency <= 0 {
-		return 0, errors.New("invalid converter efficiency")
-	}
-	return EnergyUnit(value / c.efficiency), nil
-}
-
-func (c *HeatConverter) Efficiency() float64 { return c.efficiency }
-
-// ElectricConverter: lida com throughput/loss (simplificado)
-type ElectricConverter struct {
-	efficiency float64
-}
-
-func NewElectricConverter(efficiency float64) *ElectricConverter {
+func newBaseConverter(efficiency float32) baseConverter {
 	if efficiency <= 0 {
 		efficiency = 0.85
 	}
-	return &ElectricConverter{efficiency: efficiency}
+	return baseConverter{efficiency: efficiency}
 }
 
-func (c *ElectricConverter) TypeName() string { return "electric" }
+func (b baseConverter) FromBase(e EnergyUnit) EnergyUnit { return e * EnergyUnit(b.efficiency) }
 
-func (c *ElectricConverter) FromBase(e EnergyUnit) float64 { return float64(e) * c.efficiency }
-
-func (c *ElectricConverter) ToBase(value float64) (EnergyUnit, error) {
-	if c.efficiency <= 0 {
+func (b baseConverter) ToBase(value EnergyUnit) (EnergyUnit, error) {
+	if b.efficiency <= 0 {
 		return 0, errors.New("invalid converter efficiency")
 	}
-	return EnergyUnit(value / c.efficiency), nil
+	return EnergyUnit(value / EnergyUnit(b.efficiency)), nil
 }
 
-func (c *ElectricConverter) Efficiency() float64 { return c.efficiency }
+func (b baseConverter) Efficiency() float32 { return b.efficiency }
+
+// Boiler
+type Boiler struct{ base baseConverter }
+
+func NewBoiler(eff float32) *Boiler { return &Boiler{base: newBaseConverter(eff)} }
+
+func (c *Boiler) FromType() string                        { return "heat" }
+func (c *Boiler) FromBase(e EnergyUnit) EnergyUnit        { return c.base.FromBase(e) }
+func (c *Boiler) ToType() string                          { return "kinetic" }
+func (c *Boiler) ToBase(v EnergyUnit) (EnergyUnit, error) { return c.base.ToBase(v) }
+func (c *Boiler) Efficiency() float32                     { return c.base.Efficiency() }
+
+// Dynamo
+type Dynamo struct{ base baseConverter }
+
+func NewDynamo(eff float32) *Dynamo { return &Dynamo{base: newBaseConverter(eff)} }
+
+func (c *Dynamo) FromType() string                        { return "kinetic" }
+func (c *Dynamo) FromBase(e EnergyUnit) EnergyUnit        { return c.base.FromBase(e) }
+func (c *Dynamo) ToType() string                          { return "electric" }
+func (c *Dynamo) ToBase(v EnergyUnit) (EnergyUnit, error) { return c.base.ToBase(v) }
+func (c *Dynamo) Efficiency() float32                     { return c.base.Efficiency() }
