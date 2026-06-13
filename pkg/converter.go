@@ -1,6 +1,13 @@
 package energy
 
-import "errors"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+)
+
+type ConverterID string
 
 type EnergyConverter interface {
 	FromType() string
@@ -10,44 +17,72 @@ type EnergyConverter interface {
 	Efficiency() float32
 }
 
-type baseConverter struct{ efficiency float32 }
-
-func newBaseConverter(efficiency float32) baseConverter {
-	if efficiency <= 0 {
-		efficiency = 0.85
-	}
-	return baseConverter{efficiency: efficiency}
+type CustomConverter struct {
+	IDStr      ConverterID `json:"id"`
+	FromEnergy string      `json:"from_type"`
+	ToEnergy   string      `json:"to_type"`
+	Eff        float32     `json:"efficiency"`
 }
 
-func (b baseConverter) FromBase(e EnergyUnit) EnergyUnit { return e * EnergyUnit(b.efficiency) }
+// Garantir que CustomConverter implementa EnergyConverter em tempo de compilação
+var _ EnergyConverter = (*CustomConverter)(nil)
 
-func (b baseConverter) ToBase(value EnergyUnit) (EnergyUnit, error) {
-	if b.efficiency <= 0 {
+func (c *CustomConverter) ID() ConverterID                  { return c.IDStr }
+func (c *CustomConverter) FromType() string                 { return c.FromEnergy }
+func (c *CustomConverter) ToType() string                   { return c.ToEnergy }
+func (c *CustomConverter) Efficiency() float32              { return c.Eff }
+func (c *CustomConverter) FromBase(e EnergyUnit) EnergyUnit { return e * EnergyUnit(c.Eff) }
+func (c *CustomConverter) ToBase(value EnergyUnit) (EnergyUnit, error) {
+	if c.Eff <= 0 {
 		return 0, errors.New("invalid converter efficiency")
 	}
-	return EnergyUnit(value / EnergyUnit(b.efficiency)), nil
+
+	return EnergyUnit(value / EnergyUnit(c.Eff)), nil
 }
 
-func (b baseConverter) Efficiency() float32 { return b.efficiency }
+var EnergyConverters = make(map[ConverterID]*CustomConverter)
 
-// Boiler
-type Boiler struct{ base baseConverter }
+func RegisterConverter(c *CustomConverter) error {
+	if c.IDStr == "" {
+		return errors.New("🧨 Elemento não pode ter ID vazio")
+	}
+	if c.Eff <= 0 || c.Eff > 1.0 {
+		// Fallback ou validação de eficiência
+		c.Eff = 0.85
+	}
+	if _, exists := EnergyConverters[c.IDStr]; exists {
+		return fmt.Errorf("🧨 Elemento com ID %s já registrado", c.IDStr)
+	}
 
-func NewBoiler(eff float32) *Boiler { return &Boiler{base: newBaseConverter(eff)} }
+	EnergyConverters[c.IDStr] = c
+	return nil
+}
 
-func (c *Boiler) FromType() string                        { return "heat" }
-func (c *Boiler) FromBase(e EnergyUnit) EnergyUnit        { return c.base.FromBase(e) }
-func (c *Boiler) ToType() string                          { return "kinetic" }
-func (c *Boiler) ToBase(v EnergyUnit) (EnergyUnit, error) { return c.base.ToBase(v) }
-func (c *Boiler) Efficiency() float32                     { return c.base.Efficiency() }
+func GetConverter(id ConverterID) (*CustomConverter, error) {
+	if c, ok := EnergyConverters[id]; ok {
+		return c, nil
+	}
+	return nil, fmt.Errorf("🧨 Converter %v: not found", id)
+}
 
-// Dynamo
-type Dynamo struct{ base baseConverter }
+func LoadConvertersFromJSON(convertersPath string) error {
+	cData, err := os.ReadFile(convertersPath)
+	if err != nil {
+		return fmt.Errorf("erro lendo elementos: %w", err)
+	}
 
-func NewDynamo(eff float32) *Dynamo { return &Dynamo{base: newBaseConverter(eff)} }
+	var cList []CustomConverter
+	if err := json.Unmarshal(cData, &cList); err != nil {
+		return fmt.Errorf("erro ao parsear JSON: %w", err)
+	}
 
-func (c *Dynamo) FromType() string                        { return "kinetic" }
-func (c *Dynamo) FromBase(e EnergyUnit) EnergyUnit        { return c.base.FromBase(e) }
-func (c *Dynamo) ToType() string                          { return "electric" }
-func (c *Dynamo) ToBase(v EnergyUnit) (EnergyUnit, error) { return c.base.ToBase(v) }
-func (c *Dynamo) Efficiency() float32                     { return c.base.Efficiency() }
+	for _, c := range cList {
+		// Passamos uma cópia local persistida adequadamente
+		conv := c
+		if err := RegisterConverter(&conv); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
