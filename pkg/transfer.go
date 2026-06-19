@@ -1,6 +1,9 @@
 package energy
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 // Rede/Flow: canal com throughput e perda por distância
 type EnergyPipe struct {
@@ -15,39 +18,46 @@ func (p *EnergyPipe) Transfer(from EnergySource, to EnergySink, want EnergyUnit)
 		return 0, nil, nil
 	}
 
-	// 1. Puxa a energia disponível da fonte
-	got, err := from.(EnergySink).Consume(want) // Cast temporário se for um EnergyNode, ou ajuste a interface
+	// 1. Puxa energia com segurança se a fonte permitir consumo direto (como uma bateria/node)
+	var got EnergyUnit
+	if consumerFrom, ok := from.(interface {
+		Consume(EnergyUnit) (EnergyUnit, error)
+	}); ok {
+		got, err = consumerFrom.Consume(want)
+	} else {
+		// Se for uma fonte pura (ex: painel solar), nós apenas "olhamos" ou assumimos a produção
+		got = math.Min(from.Peek(), want)
+		// Aqui você precisaria de um método na fonte para confirmar a extração, ex: from.Extract(got)
+	}
 	if err != nil || got <= 0 {
 		return 0, nil, err
 	}
 
-	// 2. Aplica perda por distância (Resistência do cabo)
+	// 2. Aplica perda por distância
 	lossFrac := math.Max(0.0, p.LossPerUnitDistance*p.Distance)
 	if lossFrac > 1.0 {
 		lossFrac = 1.0
 	}
-
 	lossAmount := float64(got) * lossFrac
 	effective := EnergyUnit(float64(got) - lossAmount)
 
-	// 3. Aplica o teto de vazão (Throughput) do cabo
 	if p.ThroughputPerTick > 0 && effective > p.ThroughputPerTick {
-		// Se estourar o limite, o excesso é descartado ou acumula (aqui limitamos o que é entregue)
-		// Em jogos como Factorio, o cabo simplesmente gargala a transferência.
 		effective = p.ThroughputPerTick
 	}
 
-	// 4. Entrega a energia convertida para o consumidor
-	// Como a interface EnergySink usa Consume(), para fins de rede elétrica pura,
-	// assumimos que injetar energia em um Sink/Node é feito via Produce se for Node,
-	// ou se o 'to' for um acumulador.
-	// Nota: Se 'to' for uma máquina consumidora pura, ela precisará de um buffer interno (Battery)
-	produced, perr := to.(EnergySource).Produce(effective)
-	if perr != nil {
-		return 0, nil, perr
+	// 3. Entrega a energia convertida para o consumidor checando se ele aceita recarga (EnergyNode/Battery)
+	var produced EnergyUnit
+	if nodeTo, ok := to.(interface {
+		Produce(EnergyUnit) (EnergyUnit, error)
+	}); ok {
+		produced, err = nodeTo.Produce(effective)
+		if err != nil {
+			return 0, nil, err
+		}
+	} else {
+		return 0, nil, fmt.Errorf("target sink cannot receive/store energy directly from pipe")
 	}
 
-	// Gera calor proporcional à perda de transmissão nos fios
 	if lossAmount > 0 {
 		byproducts = append(byproducts, EnergyByproduct{Type: "heat", Value: lossAmount})
 	}

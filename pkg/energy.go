@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"sync"
 
 	container "github.com/GoGamesLab/Inventory/pkg"
 )
@@ -52,55 +51,54 @@ type EnergyByproduct struct {
 
 // Converters registry and nodes
 type EnergyManager struct {
-	converters map[string]EnergyConverter
-	nodes      map[string]EnergyNode
+	EnergyConverters map[string]EnergyConverter
+	EnergyNodes      map[string]EnergyNode
 }
 
-var (
-	em   *EnergyManager
-	once sync.Once
-)
-
-func EnergyManagerInstance() *EnergyManager {
-	once.Do(func() {
-		em = &EnergyManager{
-			converters: make(map[string]EnergyConverter),
-			nodes:      make(map[string]EnergyNode),
-		}
-	})
-	return em
+func NewEnergyManager() *EnergyManager {
+	return &EnergyManager{
+		EnergyConverters: make(map[string]EnergyConverter),
+		EnergyNodes:      make(map[string]EnergyNode),
+	}
 }
 
-func (m *EnergyManager) RegisterConverter(c EnergyConverter) { m.converters[c.ToType()] = c }
+func (m *EnergyManager) RegisterConverter(c EnergyConverter) { m.EnergyConverters[c.ToType()] = c }
 
-func (m *EnergyManager) RegisterNode(id string, n EnergyNode) { m.nodes[id] = n }
+func (m *EnergyManager) RegisterNode(id string, n EnergyNode) { m.EnergyNodes[id] = n }
 
-// Satisfaz um requisito: tenta prover Amount do TypeHint
-// Retorna quantidade efetivamente fornecida (base units) e byproducts gerados
-// TODO: considerar a conversão From/To para encontrar o conversor disponível
+// SatisfyRequirement satisfaz um requisito: tenta prover req.Amount convertendo a energia necessária.
+// Retorna a quantidade efetivamente fornecida (em unidades do requisito) e os subprodutos gerados.
 func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs []string) (provided EnergyUnit, byproducts []EnergyByproduct, err error) {
-	conv, ok := m.converters[req.TypeHint]
+	conv, ok := m.EnergyConverters[req.TypeHint]
 	if !ok {
 		return 0, nil, fmt.Errorf("no converter for type %q", req.TypeHint)
 	}
 
 	log.Printf("Using converter %s (eff=%.3f)", conv.ToType(), conv.Efficiency())
 
-	need := req.Amount // in base units
-	if need <= 0 {
+	if req.Amount <= 0 {
 		return 0, nil, nil
 	}
 
-	// build preferred set for O(1) checks
+	eff := float64(conv.Efficiency())
+	if eff <= 0 {
+		return 0, nil, fmt.Errorf("invalid converter efficiency: %.3f", eff)
+	}
+
+	// Como o conversor tem uma perda, para entregar `req.Amount` de energia útil,
+	// nós precisamos extrair um valor maior (`neededFromSource`) da fonte primária.
+	neededFromSource := req.Amount / eff
+	var totalSourceConsumed float64
+
+	// Build preferred set para buscas O(1)
 	preferred := make(map[string]struct{}, len(preferNodeIDs))
 	for _, p := range preferNodeIDs {
 		preferred[p] = struct{}{}
 	}
 
-	// strategy: iterate preferred nodes first, try to consume stored base units
-	var totalProvided EnergyUnit
+	// ESTRATÉGIA 1: Iterar pelos nós preferenciais primeiro (Baterias/Buffers locais)
 	for _, id := range preferNodeIDs {
-		node, exists := m.nodes[id]
+		node, exists := m.EnergyNodes[id]
 		if !exists {
 			continue
 		}
@@ -110,52 +108,61 @@ func (m *EnergyManager) SatisfyRequirement(req EnergyRequirement, preferNodeIDs 
 			continue
 		}
 
-		want := math.Min(need-totalProvided, avail)
-		consumed, err := node.Consume(want)
+		// Quanto ainda precisamos extrair da fonte primária neste passo
+		remainingSourceNeeded := neededFromSource - totalSourceConsumed
+		wantFromSource := math.Min(remainingSourceNeeded, avail)
+
+		consumed, err := node.Consume(wantFromSource)
 		if err != nil {
 			continue
 		}
-		totalProvided += consumed
+		totalSourceConsumed += consumed
 
-		// Byproduct example: conversion loss becomes heat
-		loss := float64(1.0-conv.Efficiency()) * float64(consumed)
+		// Subproduto: A perda da conversão vira calor
+		loss := (1.0 - eff) * consumed
 		if loss > 0 {
 			byproducts = append(byproducts, EnergyByproduct{Type: "heat", Value: loss})
 		}
 
-		if totalProvided >= need {
+		if totalSourceConsumed >= neededFromSource {
 			break
 		}
 	}
 
-	// If still lacking, attempt to produce from nodes that can Produce (reactors),
-	// skipping the preferred nodes already tried.
-	if totalProvided < need {
-		for id, node := range m.nodes {
+	// ESTRATÉGIA 2: Se ainda faltar energia, tenta produzir de nós geradores (ex: Reatores),
+	// pulando os nós preferenciais que já foram testados.
+	if totalSourceConsumed < neededFromSource {
+		for id, node := range m.EnergyNodes {
 			if _, isPref := preferred[id]; isPref {
 				continue
 			}
 
-			// try produce
-			toProduce := need - totalProvided
-			prod, pErr := node.Produce(toProduce)
+			remainingSourceNeeded := neededFromSource - totalSourceConsumed
+			prod, pErr := node.Produce(remainingSourceNeeded)
 			if pErr != nil || prod <= 0 {
 				continue
 			}
-			totalProvided += prod
-			loss := float64(1.0-conv.Efficiency()) * float64(prod)
+
+			totalSourceConsumed += prod
+
+			loss := (1.0 - eff) * prod
 			if loss > 0 {
 				byproducts = append(byproducts, EnergyByproduct{Type: "heat", Value: loss})
 			}
-			if totalProvided >= need {
+
+			if totalSourceConsumed >= neededFromSource {
 				break
 			}
 		}
 	}
 
-	if totalProvided == 0 {
+	if totalSourceConsumed == 0 {
 		return 0, byproducts, errors.New("no energy could be provided")
 	}
 
-	return totalProvided, byproducts, nil
+	// A energia útil efetivamente entregue para a máquina é o que consumimos da fonte
+	// multiplicado pela eficiência do conversor.
+	provided = totalSourceConsumed * eff
+
+	return provided, byproducts, nil
 }
