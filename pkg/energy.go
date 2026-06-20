@@ -36,8 +36,7 @@ func NewEnergyManager() *EnergyManager {
 	}
 }
 
-func (m *EnergyManager) RegisterConverter(c EnergyConverter) { m.EnergyConverters[c.ToType()] = c }
-
+func (m *EnergyManager) RegisterConverter(c EnergyConverter)      { m.EnergyConverters[c.ToType()] = c }
 func (m *EnergyManager) RegisterSource(id string, n EnergySource) { m.EnergySources[id] = n }
 func (m *EnergyManager) RegisterSink(id string, n EnergySink)     { m.EnergySinks[id] = n }
 
