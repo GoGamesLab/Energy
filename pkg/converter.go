@@ -24,7 +24,6 @@ type CustomConverter struct {
 	Eff        float32     `json:"efficiency"`
 }
 
-// Garantir que CustomConverter implementa EnergyConverter em tempo de compilação
 var _ EnergyConverter = (*CustomConverter)(nil)
 
 func (c *CustomConverter) ID() ConverterID                  { return c.IDStr }
@@ -47,7 +46,6 @@ func RegisterConverter(c *CustomConverter) error {
 		return errors.New("🧨 Elemento não pode ter ID vazio")
 	}
 	if c.Eff <= 0 || c.Eff > 1.0 {
-		// Fallback ou validação de eficiência
 		c.Eff = 0.85
 	}
 	if _, exists := EnergyConverters[c.IDStr]; exists {
@@ -68,16 +66,15 @@ func GetConverter(id ConverterID) (*CustomConverter, error) {
 func LoadConvertersFromJSON(convertersPath string) error {
 	cData, err := os.ReadFile(convertersPath)
 	if err != nil {
-		return fmt.Errorf("erro lendo elementos: %w", err)
+		return err
 	}
 
 	var cList []CustomConverter
 	if err := json.Unmarshal(cData, &cList); err != nil {
-		return fmt.Errorf("erro ao parsear JSON: %w", err)
+		return err
 	}
 
 	for _, c := range cList {
-		// Passamos uma cópia local persistida adequadamente
 		conv := c
 		if err := RegisterConverter(&conv); err != nil {
 			return err
