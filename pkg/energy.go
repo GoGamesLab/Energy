@@ -1,6 +1,8 @@
 package energy
 
 import (
+	"log"
+
 	container "github.com/GoGamesLab/Inventory/pkg"
 )
 
@@ -23,23 +25,21 @@ type EnergySink interface {
 }
 
 type EnergyManager struct {
-	EnergyConverters map[string]EnergyConverter
-	EnergySources    map[string]EnergySource
-	EnergySinks      map[string]EnergySink
+	EnergySources map[string]EnergySource
+	EnergySinks   map[string]EnergySink
 }
 
 func NewEnergyManager() *EnergyManager {
 	return &EnergyManager{
-		EnergyConverters: make(map[string]EnergyConverter),
-		EnergySources:    make(map[string]EnergySource),
-		EnergySinks:      make(map[string]EnergySink),
+		EnergySources: make(map[string]EnergySource),
+		EnergySinks:   make(map[string]EnergySink),
 	}
 }
 
 func (m *EnergyManager) RegisterSource(id string, n EnergySource) { m.EnergySources[id] = n }
 func (m *EnergyManager) RegisterSink(id string, n EnergySink)     { m.EnergySinks[id] = n }
 
-func (m *EnergyManager) Update() {
+func (m *EnergyManager) Update(converters []Converter, start EnergyUnit) {
 	for _, sink := range m.EnergySinks {
 		need := sink.EnergyDemand()
 		if need == 0 {
@@ -53,10 +53,23 @@ func (m *EnergyManager) Update() {
 				break
 			}
 
-			// TODO: tem de ver qual o tipo de energia da fonte
-			// e converter para o tipo desejado pelo destino
+			var to EnergyUnit
+			var base EnergyUnit = start
+			for _, mc := range converters {
+				c, err := GetConverter(mc.ID)
+				if err != nil {
+					log.Fatalf("🧨 Conversor desconhecido: %s", mc.ID)
+				}
 
-			remaining := need - got
+				to = c.FromBase(base) * EnergyUnit(mc.Quantity)
+				if _, err := c.ToBase(to); err != nil {
+					log.Fatalf("🧨 converter: %s", err)
+				}
+
+				base = to
+			}
+
+			remaining := need - got + base
 			produced := src.GenerateEnergy(remaining)
 			got += produced
 		}
