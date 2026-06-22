@@ -11,14 +11,14 @@ type Supply struct {
 }
 
 type EnergySource interface {
-	Capacity() EnergyUnit
-	Produce(amount EnergyUnit) EnergyUnit
+	EnergyCapacity() EnergyUnit
+	GenerateEnergy(amount EnergyUnit) EnergyUnit
 	Type() string
 }
 
 type EnergySink interface {
-	Demand() EnergyUnit
-	Consume() EnergyUnit
+	EnergyDemand() EnergyUnit
+	ConsumeEnergy() EnergyUnit
 	Type() string
 }
 
@@ -36,13 +36,12 @@ func NewEnergyManager() *EnergyManager {
 	}
 }
 
-func (m *EnergyManager) RegisterConverter(c EnergyConverter)      { m.EnergyConverters[c.ToType()] = c }
 func (m *EnergyManager) RegisterSource(id string, n EnergySource) { m.EnergySources[id] = n }
 func (m *EnergyManager) RegisterSink(id string, n EnergySink)     { m.EnergySinks[id] = n }
 
 func (m *EnergyManager) Update() {
 	for _, sink := range m.EnergySinks {
-		need := sink.Demand()
+		need := sink.EnergyDemand()
 		if need == 0 {
 			continue
 		}
@@ -58,12 +57,12 @@ func (m *EnergyManager) Update() {
 			// e converter para o tipo desejado pelo destino
 
 			remaining := need - got
-			produced := src.Produce(remaining)
+			produced := src.GenerateEnergy(remaining)
 			got += produced
 		}
 
 		if got+1e-9 >= need {
-			sink.Consume()
+			sink.ConsumeEnergy()
 		}
 	}
 }

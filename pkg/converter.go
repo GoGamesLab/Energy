@@ -9,6 +9,11 @@ import (
 
 type ConverterID string
 
+type Converter struct {
+	ID       ConverterID
+	Quantity int
+}
+
 type EnergyConverter interface {
 	FromType() string
 	FromBase(e EnergyUnit) EnergyUnit
