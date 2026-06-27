@@ -25,12 +25,16 @@ type EnergySink interface {
 }
 
 type EnergyManager struct {
+	Produced      EnergyUnit
+	Consumed      EnergyUnit
 	EnergySources map[string]EnergySource
 	EnergySinks   map[string]EnergySink
 }
 
 func NewEnergyManager() *EnergyManager {
 	return &EnergyManager{
+		Produced:      0.0,
+		Consumed:      0.0,
 		EnergySources: make(map[string]EnergySource),
 		EnergySinks:   make(map[string]EnergySink),
 	}
@@ -38,6 +42,8 @@ func NewEnergyManager() *EnergyManager {
 
 func (m *EnergyManager) RegisterSource(id string, n EnergySource) { m.EnergySources[id] = n }
 func (m *EnergyManager) RegisterSink(id string, n EnergySink)     { m.EnergySinks[id] = n }
+
+func (m *EnergyManager) GetEnergy() EnergyUnit { return m.Produced - m.Consumed }
 
 func (m *EnergyManager) Update(converters []Converter, start EnergyUnit) {
 	for _, sink := range m.EnergySinks {
@@ -71,10 +77,12 @@ func (m *EnergyManager) Update(converters []Converter, start EnergyUnit) {
 
 			remaining := need - got + base
 			produced := src.GenerateEnergy(remaining)
+			m.Produced += produced
 			got += produced
 		}
 
 		if got+1e-9 >= need {
+			m.Consumed += need
 			sink.ConsumeEnergy()
 		}
 	}
